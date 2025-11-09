@@ -23,16 +23,22 @@ function App() {
   const [kvRecord, setKvRecord] = useState(null);
   const [datasetItems, setDatasetItems] = useState([]);
   const [logs, setLogs] = useState([]);
-  const addLog = (msg) => setLogs((l) => [...l, typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2)]);
+  const addLog = msg => setLogs(l => [...l, typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2)]);
 
   const client = useMemo(() => {
     if (!token || !ApifyClient) return null;
-    try { return new ApifyClient({ token }); } catch (_) { return null; }
+    try {
+      return new ApifyClient({ token });
+    } catch (_) {
+      return null;
+    }
   }, [token]);
 
   useEffect(() => {
     // Persist token for convenience
-    try { if (token) localStorage.setItem('apifyToken', token); } catch (_) {}
+    try {
+      if (token) localStorage.setItem('apifyToken', token);
+    } catch (_) {}
   }, [token]);
 
   async function handleLoadActor(e) {
@@ -80,7 +86,11 @@ function App() {
             newValues[key] = defVal;
           } else {
             newSchema[key] = 'json';
-            try { newValues[key] = JSON.stringify(defVal, null, 2); } catch { newValues[key] = String(defVal); }
+            try {
+              newValues[key] = JSON.stringify(defVal, null, 2);
+            } catch {
+              newValues[key] = String(defVal);
+            }
           }
         }
       }
@@ -97,13 +107,19 @@ function App() {
   }
 
   function updateInputValue(key, rawVal, type) {
-    setInputValues((prev) => ({ ...prev, [key]: type === 'number' ? (rawVal === '' ? '' : Number(rawVal)) : type === 'boolean' ? Boolean(rawVal) : rawVal }));
+    setInputValues(prev => ({ ...prev, [key]: type === 'number' ? (rawVal === '' ? '' : Number(rawVal)) : type === 'boolean' ? Boolean(rawVal) : rawVal }));
   }
 
   async function handleRunActor(e) {
     e?.preventDefault?.();
-    if (!client) { addLog('Error: ApifyClient not initialized.'); return; }
-    if (!actorId) { addLog('Error: Missing actor ID.'); return; }
+    if (!client) {
+      addLog('Error: ApifyClient not initialized.');
+      return;
+    }
+    if (!actorId) {
+      addLog('Error: Missing actor ID.');
+      return;
+    }
 
     // Build input object based on schema
     const input = {};
@@ -112,8 +128,11 @@ function App() {
         const v = inputValues[key];
         if (type === 'json') {
           if (typeof v === 'string') {
-            try { input[key] = JSON.parse(v); }
-            catch (err) { throw new Error(`Field "${key}" contains invalid JSON.`); }
+            try {
+              input[key] = JSON.parse(v);
+            } catch (err) {
+              throw new Error(`Field "${key}" contains invalid JSON.`);
+            }
           } else {
             input[key] = v; // already object/array
           }
@@ -149,33 +168,53 @@ function App() {
         addLog('Actor run did not succeed.');
         return;
       }
+      // Outputs are now fetched via a dedicated action in the Output section.
+    } catch (err) {
+      console.error(err);
+      addLog(`Run error: ${err?.message || err}`);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      // Fetch KV record
-      if (r.defaultKeyValueStoreId && outputKey) {
+  async function handleFetchOutput() {
+    if (!client) {
+      addLog('Error: ApifyClient not initialized.');
+      return;
+    }
+    if (!run) {
+      addLog('Error: No run to fetch output from.');
+      return;
+    }
+    setKvRecord(null);
+    setDatasetItems([]);
+    try {
+      setLoading(true);
+      // Fetch KV record (optional)
+      if (run.defaultKeyValueStoreId && outputKey) {
         try {
           addLog('Fetching KV store output...');
-          const rec = await client.keyValueStore(r.defaultKeyValueStoreId).getRecord(outputKey);
+          const rec = await client.keyValueStore(run.defaultKeyValueStoreId).getRecord(outputKey);
           const display = rec && typeof rec === 'object' && 'value' in rec ? rec.value : rec;
           setKvRecord({ meta: rec && rec.contentType ? { contentType: rec.contentType } : null, value: display });
         } catch (err) {
           addLog(`KV fetch warning: ${err?.message || err}`);
         }
+      } else {
+        addLog('No defaultKeyValueStoreId on run or missing Output Key.');
       }
 
-      // Fetch dataset items
-      if (r.defaultDatasetId) {
+      // Fetch dataset items (optional)
+      if (run.defaultDatasetId) {
         try {
           addLog('Fetching dataset items...');
-          const { items } = await client.dataset(r.defaultDatasetId).listItems({ clean: true });
+          const { items } = await client.dataset(run.defaultDatasetId).listItems({ clean: true });
           setDatasetItems(items || []);
           addLog(`Fetched ${items?.length || 0} dataset items.`);
         } catch (err) {
           addLog(`Dataset fetch warning: ${err?.message || err}`);
         }
       }
-    } catch (err) {
-      console.error(err);
-      addLog(`Run error: ${err?.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -187,36 +226,25 @@ function App() {
     return `https://api.apify.com/v2/key-value-stores/${storeId}/records/${encodeURIComponent(outputKey)}?disableRedirect=1`;
   }, [run, outputKey]);
 
-  const statusClass = run?.status === 'SUCCEEDED' ? 'statusBadge status-succeeded' : run?.status === 'RUNNING' ? 'statusBadge status-running' : run?.status ? 'statusBadge status-failed' : 'statusBadge';
+  const statusClass =
+    run?.status === 'SUCCEEDED' ? 'statusBadge status-succeeded' : run?.status === 'RUNNING' ? 'statusBadge status-running' : run?.status ? 'statusBadge status-failed' : 'statusBadge';
 
   return (
     <div>
       <form onSubmit={handleLoadActor}>
         <fieldset>
           <legend>Apify Connection</legend>
-          <div className="row">
+          <div className='row'>
             <label>
               <p>API Token</p>
-              <input
-                type="password"
-                placeholder="apify_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                required
-              />
+              <input type='password' placeholder='apify_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' value={token} onChange={e => setToken(e.target.value)} required />
             </label>
             <label>
               <p>Actor ID</p>
-              <input
-                type="text"
-                placeholder="apify/hello-world"
-                value={actorId}
-                onChange={(e) => setActorId(e.target.value)}
-                required
-              />
+              <input type='text' placeholder='apify/hello-world' value={actorId} onChange={e => setActorId(e.target.value)} required />
             </label>
           </div>
-          <button type="submit" className="action" disabled={!token || !actorId || !ApifyClient || loading}>
+          <button type='submit' className='action' disabled={!token || !actorId || !ApifyClient || loading}>
             {loading ? 'Loading…' : 'Load actor'}
           </button>
         </fieldset>
@@ -224,18 +252,34 @@ function App() {
         {actorDetails && (
           <fieldset>
             <legend>Actor Details</legend>
-            <div className="actorHeader">
-              <strong>{actorDetails.username}/{actorDetails.name}</strong>
-              <span className="muted"> &nbsp;ID: {actorDetails.id}</span>
+            <div className='actorHeader'>
+              <a href={`https://apify.com/${actorDetails.username}/${actorDetails.name}`} target='_blank' rel='noreferrer'>
+                <strong>
+                  {actorDetails.username}/{actorDetails.name}
+                </strong>
+              </a>
+              <span className='muted'> &nbsp;ID: {actorDetails.id}</span>
             </div>
-            {actorDetails.description && <p className="small">{actorDetails.description}</p>}
-            <div className="small muted">
-              Stats: users {actorDetails.stats?.totalUsers} (30d {actorDetails.stats?.totalUsers30Days}) · runs {actorDetails.stats?.totalRuns} (30d {actorDetails.stats?.publicActorRunStats30Days?.SUCCEEDED}/{actorDetails.stats?.publicActorRunStats30Days?.TOTAL})
+            {actorDetails.description && <p className='small'>{actorDetails.description}</p>}
+            <div className='small muted'>
+              <div>
+                <strong>Stats</strong>
+              </div>
+              <ul style={{ margin: '.25rem 0 0 .9rem' }}>
+                <li>
+                  Users: {actorDetails.stats?.totalUsers} (last 30 days: {actorDetails.stats?.totalUsers30Days})
+                </li>
+                <li>
+                  Runs: {actorDetails.stats?.totalRuns} (last 30 days: {actorDetails.stats?.publicActorRunStats30Days?.SUCCEEDED}/{actorDetails.stats?.publicActorRunStats30Days?.TOTAL})
+                </li>
+              </ul>
             </div>
             {exampleInputBody && (
               <details style={{ marginTop: '.5rem' }}>
-                <summary className="small">Example input JSON</summary>
-                <pre className="outputLog"><code>{exampleInputBody}</code></pre>
+                <summary className='small'>Example input JSON</summary>
+                <pre className='outputLog'>
+                  <code>{exampleInputBody}</code>
+                </pre>
               </details>
             )}
           </fieldset>
@@ -244,48 +288,41 @@ function App() {
         {actorDetails && (
           <fieldset>
             <legend>Actor Input</legend>
-            <div className="layoutTwo">
-              <div className="col">
-                {Object.keys(inputSchema).length === 0 && (
-                  <p className="muted small">This actor doesn't define an example input. You can still run it without additional parameters.</p>
-                )}
+            <div className='layoutTwo'>
+              <div className='col'>
+                {Object.keys(inputSchema).length === 0 && <p className='muted small'>This actor doesn't define an example input. You can still run it without additional parameters.</p>}
                 {Object.entries(inputSchema).map(([key, type]) => (
                   <label key={key}>
-                    <p>{key} <span className="muted">({type})</span></p>
+                    <p>
+                      {key} <span className='muted'>({type})</span>
+                    </p>
                     {type === 'boolean' ? (
-                      <select value={inputValues[key] ? 'true' : 'false'} onChange={(e) => updateInputValue(key, e.target.value === 'true', 'boolean')}>
-                        <option value="false">false</option>
-                        <option value="true">true</option>
+                      <select value={inputValues[key] ? 'true' : 'false'} onChange={e => updateInputValue(key, e.target.value === 'true', 'boolean')}>
+                        <option value='false'>false</option>
+                        <option value='true'>true</option>
                       </select>
                     ) : type === 'number' ? (
-                      <input type="number" value={inputValues[key]} onChange={(e) => updateInputValue(key, e.target.value, 'number')} />
+                      <input type='number' value={inputValues[key]} onChange={e => updateInputValue(key, e.target.value, 'number')} />
                     ) : type === 'json' ? (
-                      <textarea value={inputValues[key]} onChange={(e) => updateInputValue(key, e.target.value, 'json')} />
+                      <textarea value={inputValues[key]} onChange={e => updateInputValue(key, e.target.value, 'json')} />
                     ) : (
-                      <input type="text" value={inputValues[key]} onChange={(e) => updateInputValue(key, e.target.value, 'string')} />
+                      <input type='text' value={inputValues[key]} onChange={e => updateInputValue(key, e.target.value, 'string')} />
                     )}
                   </label>
                 ))}
               </div>
 
-              <div className="col">
-                <label>
-                  <p>Output Key (KV Store)</p>
-                  <input type="text" value={outputKey} onChange={(e) => setOutputKey(e.target.value)} />
-                </label>
-                <button type="button" className="action" onClick={handleRunActor} disabled={loading}>
+              <div className='col'>
+                <button type='button' className='action' onClick={handleRunActor} disabled={loading}>
                   {loading ? 'Running…' : 'Run actor'}
                 </button>
 
                 {run && (
-                  <div className="panel" style={{ marginTop: '.75rem' }}>
+                  <div className='panel' style={{ marginTop: '.75rem' }}>
                     <div className={statusClass}>{run.status}</div>
-                    <div className="small">Cost: ${run.usageTotalUsd} · Store: {run.defaultKeyValueStoreId || '—'} · Dataset: {run.defaultDatasetId || '—'}</div>
-                    {directUrl && (
-                      <div className="small" style={{ marginTop: '.4rem' }}>
-                        Direct output link: <a href={directUrl} target="_blank" rel="noreferrer">{directUrl}</a>
-                      </div>
-                    )}
+                    <div className='small'>
+                      Cost: ${run.usageTotalUsd} · Store: {run.defaultKeyValueStoreId || '—'} · Dataset: {run.defaultDatasetId || '—'}
+                    </div>
                   </div>
                 )}
               </div>
@@ -293,46 +330,70 @@ function App() {
           </fieldset>
         )}
 
+        {run && (
+          <fieldset>
+            <legend>Output</legend>
+            <div className='row'>
+              <label>
+                <p>Output Key (KV Store)</p>
+                <input type='text' value={outputKey} onChange={e => setOutputKey(e.target.value)} />
+              </label>
+              {directUrl && (
+                <div style={{ alignSelf: 'flex-end' }}>
+                  <div className='small'>Direct output link:</div>
+                  <div className='small'>
+                    <a href={directUrl} target='_blank' rel='noreferrer'>
+                      {directUrl}
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+            <button type='button' className='action' onClick={handleFetchOutput} disabled={loading}>
+              Fetch output
+            </button>
+
+            {(kvRecord || (datasetItems && datasetItems.length)) && (
+              <div style={{ marginTop: '.75rem' }}>
+                {kvRecord && (
+                  <div className='panel'>
+                    <strong>Key-Value Store Record</strong>
+                    {kvRecord.meta?.contentType && <div className='small muted'>contentType: {kvRecord.meta.contentType}</div>}
+                    <pre className='outputLog' style={{ marginTop: '.5rem' }}>
+                      <code>{safeStringify(kvRecord.value)}</code>
+                    </pre>
+                  </div>
+                )}
+                {datasetItems && datasetItems.length > 0 && (
+                  <div className='panel'>
+                    <strong>Dataset Items ({datasetItems.length})</strong>
+                    <ul className='itemsList'>
+                      {datasetItems.slice(0, 50).map((item, i) => (
+                        <li key={i}>
+                          <code>{safeStringify(item)}</code>
+                        </li>
+                      ))}
+                    </ul>
+                    {datasetItems.length > 50 && <div className='small muted'>Showing first 50 items…</div>}
+                  </div>
+                )}
+              </div>
+            )}
+          </fieldset>
+        )}
+
         <fieldset>
           <legend>Logs</legend>
           {logs.length === 0 ? (
-            <p className="muted small">No logs yet.</p>
+            <p className='muted small'>No logs yet.</p>
           ) : (
-            <div className="outputLog">
+            <div className='outputLog'>
               {logs.map((l, i) => (
                 <pre key={i}>{String(l)}</pre>
               ))}
             </div>
           )}
         </fieldset>
-
-        {(kvRecord || (datasetItems && datasetItems.length)) && (
-          <fieldset>
-            <legend>Outputs</legend>
-            {kvRecord && (
-              <div className="panel">
-                <strong>Key-Value Store Record</strong>
-                {kvRecord.meta?.contentType && (
-                  <div className="small muted">contentType: {kvRecord.meta.contentType}</div>
-                )}
-                <pre className="outputLog" style={{ marginTop: '.5rem' }}>
-                  <code>{safeStringify(kvRecord.value)}</code>
-                </pre>
-              </div>
-            )}
-            {datasetItems && datasetItems.length > 0 && (
-              <div className="panel">
-                <strong>Dataset Items ({datasetItems.length})</strong>
-                <ul className="itemsList">
-                  {datasetItems.slice(0, 50).map((item, i) => (
-                    <li key={i}><code>{safeStringify(item)}</code></li>
-                  ))}
-                </ul>
-                {datasetItems.length > 50 && <div className="small muted">Showing first 50 items…</div>}
-              </div>
-            )}
-          </fieldset>
-        )}
       </form>
     </div>
   );
