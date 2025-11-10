@@ -18,6 +18,8 @@ function App() {
   const [inputSchema, setInputSchema] = useState({});
   const [inputValues, setInputValues] = useState({});
   const [schemaSource, setSchemaSource] = useState(null); // 'build' | 'example' | null
+  // Unified JSON input (entire actor input as one JSON object)
+  const [inputJson, setInputJson] = useState('');
 
   // Run and outputs
   const [clientInfo, setClientInfo] = useState(null);
@@ -104,6 +106,7 @@ function App() {
       const requiredSet = new Set(Array.isArray(requiredList) ? requiredList : []);
       const schemaMap = {};
       const valuesMap = {};
+      let defaultInput = {};
 
       if (schemaProps && typeof schemaProps === 'object') {
         setSchemaSource('build');
@@ -142,6 +145,10 @@ function App() {
           } else {
             valuesMap[key] = v ?? '';
           }
+          // Build default input from real defaults when present
+          if (v !== undefined) {
+            defaultInput[key] = v;
+          }
         }
       } else {
         setSchemaSource('example');
@@ -153,6 +160,8 @@ function App() {
           example = {};
         }
         if (example && typeof example === 'object') {
+          // Use the example object as the default input
+          defaultInput = example;
           for (const [key, defVal] of Object.entries(example)) {
             if (Array.isArray(defVal)) {
               schemaMap[key] = { type: 'array' };
@@ -181,6 +190,12 @@ function App() {
 
       setInputSchema(schemaMap);
       setInputValues(valuesMap);
+      // Initialize unified JSON textarea with defaults
+      try {
+        setInputJson(JSON.stringify(defaultInput || {}, null, 2));
+      } catch (_) {
+        setInputJson('{}');
+      }
       // console.log(`valuesMap:`, valuesMap);
       addLog('Actor loaded. Configure inputs below, then run.');
     } catch (err) {
@@ -191,17 +206,7 @@ function App() {
     }
   }
 
-  function updateInputValue(key, rawVal, type) {
-    if (type === 'number' || type === 'integer') {
-      setInputValues(prev => ({ ...prev, [key]: rawVal === '' ? '' : Number(rawVal) }));
-      return;
-    }
-    if (type === 'boolean') {
-      setInputValues(prev => ({ ...prev, [key]: rawVal === true || rawVal === 'true' }));
-      return;
-    }
-    setInputValues(prev => ({ ...prev, [key]: rawVal }));
-  }
+  // Note: legacy per-field update logic removed in favor of a single JSON textarea
 
   async function handleRunActor(e) {
     e?.preventDefault?.();
@@ -214,72 +219,21 @@ function App() {
       return;
     }
 
-    const input = {};
+    let input = {};
     try {
-      for (const [key, sch] of Object.entries(inputSchema)) {
-        const type = sch.type;
-        const v = inputValues[key];
-        if (type === 'object') {
-          if (typeof v === 'string' && v.trim() !== '') {
-            try {
-              input[key] = JSON.parse(v);
-            } catch {
-              throw new Error(`Field "${key}" contains invalid JSON.`);
-            }
-          } else if (v && typeof v === 'object') {
-            input[key] = v;
-          }
-        } else if (type === 'array') {
-          if (typeof v === 'string') {
-            const trimmed = v.trim();
-            if (trimmed === '') {
-              /* skip empty */
-            } else if (trimmed.startsWith('[')) {
-              // Allow JSON array input
-              try {
-                const arr = JSON.parse(trimmed);
-                if (Array.isArray(arr)) input[key] = arr;
-                else throw new Error();
-              } catch {
-                throw new Error(`Field "${key}" must be one-per-line or a valid JSON array.`);
-              }
-            } else {
-              // Prefer newline separation; fallback to comma if single line
-              const rawParts = /\r|\n/.test(trimmed) ? trimmed.split(/[\r\n]+/) : trimmed.split(',');
-              const parts = rawParts.map(s => s.trim()).filter(Boolean);
-              if (sch.itemsType === 'number' || sch.itemsType === 'integer') {
-                const nums = parts.map(p => Number(p));
-                if (nums.some(n => Number.isNaN(n))) throw new Error(`Field "${key}" must contain only numbers.`);
-                input[key] = nums;
-              } else if (sch.itemsType === 'boolean') {
-                const bools = parts.map(p => p.toLowerCase()).map(p => (p === 'true' ? true : p === 'false' ? false : p));
-                if (bools.some(b => b !== true && b !== false)) throw new Error(`Field "${key}" must contain only booleans (true/false).`);
-                input[key] = bools;
-              } else {
-                input[key] = parts;
-              }
-            }
-          } else if (Array.isArray(v)) {
-            input[key] = v;
-          }
-        } else if (type === 'number' || type === 'integer') {
-          if (v === '' || Number.isNaN(Number(v))) throw new Error(`Field "${key}" must be a number.`);
-          input[key] = Number(v);
-        } else if (type === 'boolean') {
-          input[key] = Boolean(v);
-        } else {
-          // string or other
-          const s = typeof v === 'string' ? v.trim() : v;
-          if (s !== '' && s != null) input[key] = s;
-        }
+      const parsed = inputJson ? JSON.parse(inputJson) : {};
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Input JSON must be an object (e.g., { "foo": "bar" }).');
       }
+      // Validate required fields if schema is available
       const missing = Object.entries(inputSchema)
         .filter(([k, sch]) => sch.required)
         .map(([k]) => k)
-        .filter(k => !(k in input));
+        .filter(k => !(k in parsed));
       if (missing.length) throw new Error(`Missing required fields: ${missing.join(', ')}`);
+      input = parsed;
     } catch (err) {
-      addLog(err.message);
+      addLog(`Input JSON error: ${err?.message || err}`);
       return;
     }
 
@@ -289,7 +243,7 @@ function App() {
     try {
       setLoading(true);
       addLog('Starting actor run...');
-      console.log(`input:`, input)
+      console.log(`input:`, input);
       const r = await client.actor(actorId).call(input);
       setRun(r);
       addLog(`Run status: ${r.status}`);
@@ -441,71 +395,20 @@ function App() {
                 )}
               </div>
               <div className='c0ol'>
-                {Object.keys(inputSchema).length === 0 && <p className='muted small'>This actor doesn't define an input schema or example input. You can still run it without parameters.</p>}
-                {Object.entries(inputSchema).map(([key, sch]) => (
-                  <label key={key}>
-                    <p>
-                      {key}{' '}
-                      {sch.required && (
-                        <span title='required' className='muted'>
-                          *
-                        </span>
-                      )}{' '}
-                      <span className='muted'>
-                        ({sch.type}
-                        {sch.type === 'array' && sch.itemsType ? `<${sch.itemsType}>` : ''})
-                      </span>
-                    </p>
-                    {sch.description && (
-                      <div className='small muted' style={{ marginTop: '-.25rem', marginBottom: '.25rem' }}>
-                        {sch.description}
-                      </div>
-                    )}
-                    {Array.isArray(sch.enum) && sch.enum.length ? (
-                      <select defaultValue={String(inputValues[key] ?? '')} onChange={e => updateInputValue(key, e.target.value, sch.type)}>
-                        <option value=''>— Select —</option>
-                        {sch.enum.map((opt, i) => (
-                          <option key={i} defaultValue={String(opt)}>
-                            {String(opt)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : sch.type === 'boolean' ? (
-                      <select defaultValue={inputValues[key] ? 'true' : 'false'} onChange={e => updateInputValue(key, e.target.value === 'true', 'boolean')}>
-                        <option value='false'>false</option>
-                        <option value='true'>true</option>
-                      </select>
-                    ) : sch.type === 'number' || sch.type === 'integer' ? (
-                      <input
-                        type='number'
-                        defaultValue={inputValues[key]}
-                        onChange={e => updateInputValue(key, e.target.value, sch.type)}
-                        placeholder={sch.placeholder != null ? String(sch.placeholder) : undefined}
-                      />
-                    ) : sch.type === 'object' ? (
-                      <textarea
-                        // defaultValue={inputValues[key]}
-                        defaultValue={JSON.stringify(inputValues[key], null, 2)}
-                        onChange={e => updateInputValue(key, e.target.value, 'object')}
-                        placeholder={sch.placeholder != null ? safeStringify(sch.placeholder) : undefined}
-                      />
-                    ) : sch.type === 'array' ? (
-                      <textarea
-                        // className="debug"
-                        defaultValue={JSON.stringify(inputValues[key], null, 2)}
-                        onChange={e => updateInputValue(key, e.target.value, 'array')}
-                        placeholder={sch.placeholder != null ? String(sch.placeholder) : 'Enter one item per line (or paste JSON array)'}
-                      />
-                    ) : (
-                      <input
-                        type='text'
-                        defaultValue={inputValues[key]}
-                        onChange={e => updateInputValue(key, e.target.value, 'string')}
-                        placeholder={sch.placeholder != null ? String(sch.placeholder) : undefined}
-                      />
-                    )}
-                  </label>
-                ))}
+                {Object.keys(inputSchema).length === 0 && <p className='muted small'>This actor doesn't define an input schema or example input. Edit the JSON below or run without parameters.</p>}
+                <label>
+                  <p>Input JSON</p>
+                  <textarea
+                    value={inputJson}
+                    onChange={e => setInputJson(e.target.value)}
+                    placeholder='{}'
+                    // className='debug'
+                    style={{ minHeight: '14rem' }}
+                  />
+                  <div className='small muted' style={{ marginTop: '.25rem' }}>
+                    Defaults are prefilled from the actor's schema or example input. Provide a valid JSON object.
+                  </div>
+                </label>
               </div>
             </div>
           </fieldset>
