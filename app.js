@@ -370,11 +370,11 @@ function App() {
           <div className='row'>
             <label>
               <p>API Token</p>
-              <input type='password' placeholder='apify_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' value={token} onChange={e => setToken(e.target.value)} required />
+              <input type='password' placeholder='apify_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' defaultValue={token} onChange={e => setToken(e.target.value)} required />
             </label>
             <label>
               <p>Actor ID</p>
-              <input type='text' placeholder='apify/hello-world' value={actorId} onChange={e => setActorId(e.target.value)} required />
+              <input type='text' placeholder='apify/hello-world' defaultValue={actorId} onChange={e => setActorId(e.target.value)} required />
             </label>
           </div>
           <button type='submit' className='action' disabled={!token || !actorId || !ApifyClient || loading}>
@@ -445,42 +445,42 @@ function App() {
                       </div>
                     )}
                     {Array.isArray(sch.enum) && sch.enum.length ? (
-                      <select value={String(inputValues[key] ?? '')} onChange={e => updateInputValue(key, e.target.value, sch.type)}>
+                      <select defaultValue={String(inputValues[key] ?? '')} onChange={e => updateInputValue(key, e.target.value, sch.type)}>
                         <option value=''>— Select —</option>
                         {sch.enum.map((opt, i) => (
-                          <option key={i} value={String(opt)}>
+                          <option key={i} defaultValue={String(opt)}>
                             {String(opt)}
                           </option>
                         ))}
                       </select>
                     ) : sch.type === 'boolean' ? (
-                      <select value={inputValues[key] ? 'true' : 'false'} onChange={e => updateInputValue(key, e.target.value === 'true', 'boolean')}>
+                      <select defaultValue={inputValues[key] ? 'true' : 'false'} onChange={e => updateInputValue(key, e.target.value === 'true', 'boolean')}>
                         <option value='false'>false</option>
                         <option value='true'>true</option>
                       </select>
                     ) : sch.type === 'number' || sch.type === 'integer' ? (
                       <input
                         type='number'
-                        value={inputValues[key]}
+                        defaultValue={inputValues[key]}
                         onChange={e => updateInputValue(key, e.target.value, sch.type)}
                         placeholder={sch.placeholder != null ? String(sch.placeholder) : undefined}
                       />
                     ) : sch.type === 'object' ? (
                       <textarea
-                        value={inputValues[key]}
+                        defaultValue={inputValues[key]}
                         onChange={e => updateInputValue(key, e.target.value, 'object')}
                         placeholder={sch.placeholder != null ? safeStringify(sch.placeholder) : undefined}
                       />
                     ) : sch.type === 'array' ? (
                       <textarea
-                        value={inputValues[key]}
+                        defaultValue={inputValues[key]}
                         onChange={e => updateInputValue(key, e.target.value, 'array')}
                         placeholder={sch.placeholder != null ? String(sch.placeholder) : 'Enter one item per line (or paste JSON array)'}
                       />
                     ) : (
                       <input
                         type='text'
-                        value={inputValues[key]}
+                        defaultValue={inputValues[key]}
                         onChange={e => updateInputValue(key, e.target.value, 'string')}
                         placeholder={sch.placeholder != null ? String(sch.placeholder) : undefined}
                       />
@@ -511,7 +511,7 @@ function App() {
             <div className='row'>
               <label>
                 <p>Output Key (KV Store)</p>
-                <input type='text' value={outputKey} onChange={e => setOutputKey(e.target.value)} />
+                <input type='text' defaultValue={outputKey} onChange={e => setOutputKey(e.target.value)} />
               </label>
               {directUrl && (
                 <div style={{ alignSelf: 'flex-end' }}>
