@@ -7,7 +7,7 @@
   "scripts": {
     "cli": "node src/cli.js",
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build --base=/apify-web-runner/",
     "preview": "vite preview"
   },
   "dependencies": {
