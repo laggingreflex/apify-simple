@@ -5,6 +5,7 @@
   "type": "module",
   "bin": "src/cli.js",
   "scripts": {
+    "cli": "node src/cli.js",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
